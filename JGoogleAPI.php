@@ -33,52 +33,67 @@
  * @package Project: JGoogleAPI
  * @version 0.1a
  *
- * */
-YiiBase::setPathOfAlias('JGoogleAPISrcAlias', dirname(__FILE__) . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR . 'google-api-php-client' . DIRECTORY_SEPARATOR . 'src');
+ */
 
-class JGoogleAPI extends CApplicationComponent {
+// google lib path alias
+YiiBase::setPathOfAlias('JGoogleAPISrcAlias', dirname(__FILE__) . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Google');
 
+/**
+ * JGoogleAPI Extension for Yii
+ * Credentials can be obtained at https://code.google.com/apis/console
+ * 
+ * @see http://code.google.com/p/google-api-php-client/wiki/OAuth2 for more information
+ */
+class JGoogleAPI extends CApplicationComponent
+{
     /**
      * @var string Defines the default authentication type to be used
      */
     public $defaultAuthenticationType = 'serviceAPI';
-    private $authenticationType = null;
-    // Credentials can be obtained at https://code.google.com/apis/console
-    // See http://code.google.com/p/google-api-php-client/wiki/OAuth2 for more information
     /**
-     * @var webApplication
-     * Saves the data for api access (Accessed by web browsers over a network.)
+     * @var string
+     */
+    private $authenticationType = null;
+    /**
+     * @var webApplication - Saves the data for api access (Accessed by web browsers over a network)
      */
     public $webappAPI = array(
-        'clientId' => null,
-        'clientEmail' => null,
-        'clientSecret' => null,
-        'redirectUri' => null,
+        'clientId'          => null,
+        'clientEmail'       => null,
+        'clientSecret'      => null,
+        'redirectUri'       => null,
+        'javascriptOrigins' => null,
+    );
+    private $_webappAPI = array(
+        'clientId'          => null,
+        'clientEmail'       => null,
+        'clientSecret'      => null,
+        'redirectUri'       => null,
         'javascriptOrigins' => null,
     );
 
     /**
-     * @var serviceAPI
-     * Saves the data for api with a service account (Calls Google APIs on behalf of your application instead of an end-user.)
-     * This is the default authentication type
+     * @var serviceAPI - Saves the data for api with a service account 
+     *                   (Calls Google APIs on behalf of your application instead of an end-user)
+     *                   This is the default authentication type
      */
     public $serviceAPI = array(
-        'clientId' => null,
-        'clientEmail' => null,
-        'publicKey' => null,
-        'keyFilePath' => null,
+        'clientId'           => null,
+        'clientEmail'        => null,
+        'publicKey'          => null,
+        'keyFilePath'        => null,
         'privateKeyPassword' => 'notasecret', //default
-        'assertionType' => 'http://oauth.net/grant_type/jwt/1.0/bearer',
-        'prn' => false
+        'assertionType'      => 'http://oauth.net/grant_type/jwt/1.0/bearer',
+        'prn'                => false
     );
     private $_serviceAPI = array(
-        'clientId' => null,
-        'clientEmail' => null,
-        'publicKey' => null,
-        'keyFilePath' => null,
+        'clientId'           => null,
+        'clientEmail'        => null,
+        'publicKey'          => null,
+        'keyFilePath'        => null,
         'privateKeyPassword' => 'notasecret', //default
-        'assertionType' => 'http://oauth.net/grant_type/jwt/1.0/bearer',
-        'prn' => false
+        'assertionType'      => 'http://oauth.net/grant_type/jwt/1.0/bearer',
+        'prn'                => false
     );
     public $simpleApiKey = null;
 
@@ -102,31 +117,40 @@ class JGoogleAPI extends CApplicationComponent {
      * 
      * Information for available scopes can be found in https://developers.google.com in the api you're trying to access
      */
-    public $scopes = null;
+    public $scopes     = null;
     public $useObjects = false;
 
     /**
-     * @var Google_Client $client 
-     * Handle the google client when created
+     * @var Google_Client $client - Handle the google client when created
      */
-    private $client = null;
+    private $client     = null;
     private $clientType = 'serviceAPI';
 
     /**
-     * @var GoogleService $_service
-     * Handle the google services when created
+     * @var GoogleService $_service - Handle the google services when created
      */
     private $_services = array();
 
     /**
-     * @var boolean $autoSession
-     * Automatic save the auth token to the session
+     * @var boolean $autoSession - Automatic save the auth token to the session
      */
     public $autoSession = true;
-
-    public function init() {
+    
+    /**
+     * @see CApplicationComponent::init()
+     */
+    public function init()
+    {
         parent::init();
+        // combine new API params with defaults
         $this->serviceAPI = array_merge($this->_serviceAPI, $this->serviceAPI);
+        $this->webappAPI  = array_merge($this->_webappAPI, $this->webappAPI);
+        
+        // register google classes autoloader after Yii autoloader to prevent conflict
+        require_once realpath(dirname(__FILE__) . '/lib/autoload.php');
+        YiiBase::registerAutoloader('google_api_php_client_autoload', false);
+        // new autoload appended now we can start import main client class
+        Yii::import('JGoogleAPISrcAlias.Google_Client');
     }
 
     /**
@@ -134,113 +158,124 @@ class JGoogleAPI extends CApplicationComponent {
      * @return \Google_Client Return the google client object
      * @throws CException Throws exception if type is invalid
      */
-    private function createClient($type = null) {
-        if (!isset($this->authenticationType)) {
+    private function createClient($type=null)
+    {
+        $allowedTypes = array('serviceAPI', 'webappAPI');
+        if ( ! isset($this->authenticationType) )
+        {
             $this->authenticationType = $this->defaultAuthenticationType;
         }
-        if (!is_null($type)) {
-            if ($type == 'serviceAPI' || $type == 'webappAPI')
-                $this->authenticationType = $type;
-            else
-                throw new CException("Invalid choosen authentication type (" . $type . "). Must be 'serviceAPI' or 'webappAPI'.");
+        if ( ! is_null($type) )
+        {
+            $this->authenticationType = $type;
         }
-
-        Yii::import('JGoogleAPISrcAlias.Google_Client');
+        if ( ! isset($this->scopes[$this->authenticationType]) OR ! in_array($this->authenticationType, $allowedTypes) )
+        {
+            throw new CException("Invalid type given for the client authentication. Must be 'serviceAPI' or 'webappAPI'.");
+        }
+        // create new client
         $client = new Google_Client();
         $client->setApplicationName(Yii::app()->name);
-        $client->setUseObjects($this->useObjects);
-        switch ($this->authenticationType) {
+        // collect all service scopes
+        $scopes   = array();
+        $services = $this->scopes[$this->authenticationType];
+        // set client type same as authentication
+        $this->clientType = $this->authenticationType;
+        
+        foreach ( $services as $service )
+        {
+            foreach ( $service as $scope )
+            {
+                $scopes[] = $scope;
+            }
+        }
+        switch ( $this->authenticationType )
+        {
             case 'serviceAPI':
-                $scopes = array();
-                if (isset($this->scopes['serviceAPI'])) {
-                    foreach ($this->scopes['serviceAPI'] as $service)
-                        foreach ($service as $scope)
-                            $scopes[] = $scope;
-                }
-                $assertionCredentials = new Google_AssertionCredentials($this->serviceAPI['clientEmail'], $scopes, file_get_contents($this->serviceAPI['keyFilePath']), $this->serviceAPI['privateKeyPassword'], $this->serviceAPI['assertionType'], $this->serviceAPI['prn']);
-                $client->setAssertionCredentials($assertionCredentials);
-                $client->setClientId($this->serviceAPI['clientId']);
-                $this->clientType = 'serviceAPI';
-                break;
+                // @todo load service credentials
+            break;
             case 'webappAPI':
-                $scopes = array();
-                if (isset($this->scopes['webappAPI'])) {
-                    foreach ($this->scopes['webappAPI'] as $service)
-                        foreach ($service as $scope)
-                            $scopes[] = $scope;
-                }
+                // load webapp credentials
                 $client->setClientId($this->webappAPI['clientId']);
                 $client->setClientSecret($this->webappAPI['clientSecret']);
                 $client->setRedirectUri($this->webappAPI['redirectUri']);
                 $client->setDeveloperKey($this->simpleApiKey);
                 $client->setScopes($scopes);
-                $this->clientType = 'webappAPI';
-                break;
-            default:
-                throw new CException("Invalid type given for the client authentication. Must be 'serviceAPI' or 'webappAPI'.");
-                break;
+            break;
         }
         return $client;
     }
 
     /**
-     * @param string $type Authentication type "service account" or "User authentication" (serviceAPI or webappAPI)
+     * 
+     * 
+     * @param  string $type Authentication type "service account" or "User authentication" (serviceAPI or webappAPI)
      * @return \Google_Client Return the google client object
      */
-    public function getClient($type = null) {
-        if (is_null($this->client))
+    public function getClient($type = null)
+    {
+        if ( is_null($this->client) )
+        {
             $this->client = $this->createClient($type);
+        }
         return $this->client;
     }
 
     /**
-     * @param string $serviceName Name of the service that we want to call
-     * @param string $type Authentication type "service account" or "User authentication" (serviceAPI or webappAPI)
+     * 
+     * 
+     * @param  string $serviceName Name of the service that we want to call
+     * @param  string $type Authentication type "service account" or "User authentication" (serviceAPI or webappAPI)
      * @return service Return instance to Google Service
+     * 
      * @throws CException  Throw exception if service name is not declared
      */
-    public function getService($serviceName, $type = null) {
-        if (!isset($serviceName)) {
+    public function getService($serviceName, $type=null)
+    {
+        if ( ! isset($serviceName) )
+        {
             throw new CException("You must declare a service name to use.");
-        } else {
-            //Need to do this so the path is set by the api library
-            $client = $this->getClient(is_null($this->clientType) ? $type : $this->clientType);
-            if (!isset($this->_services[$serviceName]) || !array_key_exists($serviceName, $this->_services)) {
-                $serviceClassName = "Google_" . $serviceName . "Service";
-                Yii::import('JGoogleAPISrcAlias.contrib.' . $serviceClassName);
-                $service = new $serviceClassName($client);
-                $this->_services[$serviceName] = $service;
-            }
+        }
+        // Need to do this so the path is set by the api library
+        $client = $this->getClient(is_null($this->clientType) ? $type : $this->clientType);
+        if ( ! isset($this->_services[$serviceName]) OR ! array_key_exists($serviceName, $this->_services) )
+        {
+            $serviceClassName = "Google_Service_{$serviceName}";
+            $service = new $serviceClassName($client);
+            $this->_services[$serviceName] = $service;
         }
         return $this->_services[$serviceName];
     }
 
     /**
-     * @param string $name Name of the object that we want to call (Ex: DriveFile )
-     * @param string\Object $service Name or Instance of the service to use, needed to preload required class
-     * @param string $type Authentication type "service account" or "User authentication" (serviceAPI or webappAPI) 
+     * 
+     * 
+     * @param  string $name Name of the object that we want to call (Ex: DriveFile )
+     * @param  string\Object $service Name or Instance of the service to use, needed to preload required class
+     * @param  string $type Authentication type "service account" or "User authentication" (serviceAPI or webappAPI) 
      * @return \Object Return the Google Object
-     * @throws CException Throw Exception if we don't declare the Object name or the Service name or instance
+     * 
+     * @throws  CException Throw Exception if we don't declare the Object name or the Service name or instance
      * @example getObject('DriveFile','Drive');
-     * If the service is not instanciated and we pass the service name that'll be created automaticaly
+     *          If the service is not instanciated and we pass the service name 
+     *          that'll be created automaticaly
      */
-    public function getObject($name, $service, $type = null) {
-        if (!isset($name)) {
+    public function getObject($name, $service, $type=null)
+    {
+        if ( ! isset($name) )
+        {
             throw new CException("You must declare one name of the object to call.");
-        } else {
-            if (!isset($service)) {
-                throw new CException("You must pass a service name or service object to use. Required for class preload.");
-            } else {
-                if (is_string($service)) {
-                    $this->getService($service, $type);
-                }
-                $objName = "Google_" . $name;
-                Yii::import('JGoogleAPISrcAlias.contrib.' . $objName);
-                return new $objName();
-            }
         }
+        if ( ! isset($service) )
+        {
+            throw new CException("You must pass a service name or service object to use. Required for class preload.");
+        }
+        if ( is_string($service) )
+        {
+            $this->getService($service, $type);
+        }
+        $objName = "Google_Service_{$name}";
+        
+        return new $objName();
     }
-
 }
-
-?>
