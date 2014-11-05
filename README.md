@@ -39,7 +39,7 @@ How to Use
 --Configuration
 
 ----config/main.php
-
+```php
     // application components
     'components' => array(
         'JGoogleAPI' => array(
@@ -81,31 +81,31 @@ How to Use
             //Use objects when retriving data from api if true or an array if false
             'useObjects'=>true,
         ),
-        ...
+        // ...
     ),
-    
+```
     
 --Usage
 
 ----Create a service
-
+```php
         $service = Yii::app()->JGoogleAPI->getService('Drive');
-        
+```        
         or
-        
+```php        
         $service = Yii::app()->JGoogleAPI->getService('Drive','webappAPI');
         if the authentication type is diferent of the default
-
+```
 ----Create a object
-
+```php
         $file = Yii::app()->JGoogleAPI->getObject('DriveFile','Drive');
         we pass the object name that we want to create and the service where it belongs
-        
+```
         or
-        
+```php        
         $file = Yii::app()->JGoogleAPI->getObject('DriveFile','Drive','webappAPI');
         if the authentication type is different of the default
-        
+```
         
 ----If you choose 'webappAPI' authentication method you need aditional steps, because you need to save the token from
     the authenticate method
@@ -113,6 +113,7 @@ How to Use
         API Ex: http://code.google.com/p/google-api-php-client/
     
         Ex:
+```php
         //Create an extension Instance
         $jgoogleapi = Yii::app()->JGoogleAPI;
 
@@ -148,7 +149,7 @@ How to Use
             Yii::app()->session['auth_token']=null;
             throw $exc;
         }
- 
+```
 
 CHANGELOG
 ---------
